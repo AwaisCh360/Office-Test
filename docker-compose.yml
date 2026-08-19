@@ -37,9 +37,11 @@ services:
   celery_worker:
     image: ghcr.io/awaisch360/office-test/strix-worker:latest
     container_name: strix_celery_worker
-    command: ["celery", "-A", "strix.interface.viewer.tasks", "worker", "--loglevel=info", "--concurrency=10"]
+    command: >
+      sh -c "pip install sentry-sdk bcrypt pyjwt && celery -A strix.interface.viewer.tasks worker --loglevel=info --concurrency=10"
     volumes:
       - ./strix_runs:/app/strix_runs
+      - ./strix:/app/strix
       # Mount docker socket so celery worker can spawn sandbox containers via strix cli
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

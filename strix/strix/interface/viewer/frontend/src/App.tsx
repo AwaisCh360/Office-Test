@@ -42,8 +42,6 @@ import PastRunsView from "@/components/PastRunsView";
 import EmailReportView from "@/components/EmailReportView";
 import { RunDetails } from "@/components/RunDetails";
 import { TrustToast } from "@/components/TrustToast";
-import EmailReportCta from "./components/EmailReportCta";
-import HistoryView from "./components/HistoryView";
 import FeedbackView from "@/components/FeedbackView";
 import AdminView from "@/components/AdminView";
 import Login from "@/components/Login";
@@ -602,13 +600,6 @@ function FindingsList({
             <p className="mt-0.5 mb-3 text-xs text-[#666]">
               Attack surface monitoring catches new exposures for your org over time.
             </p>
-            <ProInlineCta
-              label="Attack surface monitoring"
-              desc="Continuous coverage for your whole org."
-              slug="asm"
-              surface="empty_state"
-              icon={Radar}
-            />
           </div>
         )}
       </div>
@@ -822,15 +813,6 @@ function AgentsTab({ run, canSteer }: { run: LoadedRun; canSteer: boolean }) {
       <div className="rounded-xl border border-[#222] bg-[rgba(255,255,255,0.02)] p-5">
         <p className="text-sm font-semibold text-white">Run this pentest with more depth</p>
         <p className="mt-0.5 text-xs text-[#666]">Re-run this pentest on managed infra in the cloud.</p>
-        <div className="mt-3 flex flex-wrap gap-2.5">
-          <ProInlineCta
-            label="Re-run in Strix Pro with more depth"
-            desc="Run this pentest on managed infra with more depth."
-            slug="live_scan"
-            surface="agents"
-            icon={Rocket}
-          />
-        </div>
       </div>
 
       <AgentDetailModal

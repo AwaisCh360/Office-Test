@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { Target, Loader2, AlertCircle, Zap, ScanLine, Layers, FileText, UploadCloud, X, Settings2, SlidersHorizontal, Info, BookOpen, ShieldCheck } from "lucide-react";
-import { startScan, FilePayload } from "@/data/serverSource";
+import { startScan, fetchRunSummary, FilePayload } from "@/data/serverSource";
 
 interface DashboardViewProps {
   onScanStarted: (runName: string) => void;
@@ -110,6 +110,21 @@ export default function DashboardView({ onScanStarted }: DashboardViewProps) {
       }
 
       const result = await startScan(payload);
+      
+      let retries = 0;
+      while (retries < 60) {
+        try {
+          const run = await fetchRunSummary(result.run_name);
+          if (run && run.summary && run.summary.status !== "initializing") {
+            break;
+          }
+        } catch (e) {
+          // ignore network errors while polling
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+        retries++;
+      }
+      
       onScanStarted(result.run_name);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start scan.");

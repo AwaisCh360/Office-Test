@@ -37,7 +37,7 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 from strix.core.paths import run_record_path
 from strix.interface.viewer import auth
-from strix.interface.viewer.db import init_db, get_db, User, Run
+from strix.interface.viewer.db import init_db, get_db, User, Run, AuditLog, PlatformSetting
 from strix.interface.viewer.transcript import (
     build_run_state,
     primary_target,
@@ -46,8 +46,6 @@ from strix.interface.viewer.transcript import (
     read_vulnerabilities,
     severity_counts,
 )
-
-logger = logging.getLogger(__name__)
 
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "admin")
 JWT_SECRET = os.environ.get("JWT_SECRET", "super-secret-strix-key-12345")
@@ -63,8 +61,8 @@ def bundle_is_built() -> bool:
 def _iter_run_dirs(base_dir: Path) -> list[Path]:
     if not base_dir.is_dir():
         return []
-    run_dirs = [child for child in base_dir.iterdir() if run_record_path(child).is_file()]
-    run_dirs.sort(key=lambda child: run_record_path(child).stat().st_mtime, reverse=True)
+    run_dirs = [child for child in base_dir.iterdir() if child.is_dir() and not child.name.startswith(".")]
+    run_dirs.sort(key=lambda child: child.stat().st_mtime, reverse=True)
     return run_dirs
 
 def run_list_entry(run_dir: Path) -> dict[str, Any]:
@@ -73,7 +71,7 @@ def run_list_entry(run_dir: Path) -> dict[str, Any]:
         "name": record.get("run_name") or run_dir.name,
         "target": primary_target(record),
         "scan_mode": record.get("scan_mode"),
-        "status": record.get("status"),
+        "status": record.get("status") or "initializing",
         "start_time": record.get("start_time"),
         "end_time": record.get("end_time"),
         "finished": bool(record.get("finished")),
@@ -85,7 +83,7 @@ def resolve_run_dir(base_dir: Path, run_param: str | None, default_run_dir: Path
         return default_run_dir
     base = base_dir.resolve()
     candidate = (base / run_param).resolve()
-    if candidate.parent != base or not run_record_path(candidate).is_file():
+    if candidate.parent != base or not candidate.is_dir():
         return None
     return candidate
 
@@ -152,13 +150,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.state.run_dir = None
-app.state.base_dir = None
-app.state.assets_dir = None
-app.state.steer_handler = None
-app.state.session_token = None
-app.state.cookie_name = SESSION_COOKIE_PREFIX
+import secrets
 
+app.state.run_dir = Path(os.environ.get("STRIX_RUN_DIR", "")) if os.environ.get("STRIX_RUN_DIR") else None
+app.state.base_dir = app.state.run_dir.parent if app.state.run_dir else Path(os.environ.get("STRIX_BASE_DIR", "/Users/bit/Desktop/Office/strix_runs"))
+app.state.assets_dir = bundle_dir()
+app.state.steer_handler = None
+app.state.session_token = secrets.token_urlsafe(32)
+app.state.cookie_name = SESSION_COOKIE_PREFIX
+from strix.interface.viewer.db import _db_sessions
+
+@app.middleware("http")
+async def db_cleanup_middleware(request: Request, call_next):
+    token = _db_sessions.set([])
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        sessions = _db_sessions.get()
+        if sessions:
+            for session in sessions:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+        _db_sessions.reset(token)
 
 def get_current_user(request: Request) -> User | None:
     auth_header = request.headers.get("Authorization", "")
@@ -175,9 +191,21 @@ def get_current_user(request: Request) -> User | None:
     except Exception:
         return None
 
+from strix.interface.viewer.db import PlatformSetting
+
 def require_user(user: User | None = Depends(get_current_user)) -> User:
     if not user:
         raise HTTPException(status_code=403, detail="forbidden")
+    
+    if getattr(user, 'is_suspended', False):
+        raise HTTPException(status_code=403, detail="Your account has been suspended by an administrator.")
+        
+    if not getattr(user, 'is_admin', False):
+        db = get_db()
+        maintenance_setting = db.query(PlatformSetting).filter(PlatformSetting.key == "maintenance_mode").first()
+        if maintenance_setting and maintenance_setting.value.lower() == "true":
+            raise HTTPException(status_code=503, detail="The platform is currently under maintenance. Please try again later.")
+            
     return user
 
 def require_admin(user: User = Depends(require_user)) -> User:
@@ -213,6 +241,9 @@ async def login(request: Request):
     db = get_db()
     user = db.query(User).filter(User.email == email).first()
     if user and _check_password(password, user.password_hash):
+        if getattr(user, 'is_suspended', False):
+            return JSONResponse(status_code=403, content={"error": "Your account has been suspended by an administrator."})
+            
         if len(user.password_hash) == 64:
             user.password_hash = _hash_password(password)
             db.commit()
@@ -339,13 +370,14 @@ def get_transcript(run: str | None = None, user: User | None = Depends(get_curre
 
 @app.post("/api/run/delete")
 async def delete_run(request: Request, user: User = Depends(require_user)):
+    import shutil
     body = await request.json()
     run_name = body.get("run")
     if not run_name:
         return JSONResponse(status_code=400, content={"error": "missing run name"})
         
     run_dir = app.state.base_dir / run_name
-    if not run_dir.is_dir() or not (run_dir / "run.json").exists():
+    if not run_dir.is_dir():
         return JSONResponse(status_code=404, content={"error": "run not found"})
         
     db = get_db()
@@ -408,6 +440,17 @@ async def start_run(request: Request, user: User = Depends(require_user)):
     except Exception as e:
         logger.exception("Failed to add run to DB")
         db.rollback()
+        
+    # Write an initial placeholder summary so the UI can show the target immediately
+    import json, time
+    initial_summary = {
+        "run_name": run_name,
+        "scan_mode": scan_mode,
+        "status": "initializing",
+        "start_time": time.time(),
+        "targets": targets,
+    }
+    (run_dir / "run.json").write_text(json.dumps(initial_summary), encoding="utf-8")
 
     cmd = [sys.executable, "-m", "strix", "--scan-mode", scan_mode, "--scope-mode", scope_mode, "--run-name", run_name, "--non-interactive"]
     if diff_base:
@@ -474,16 +517,20 @@ async def start_run(request: Request, user: User = Depends(require_user)):
     # We pass the token in the environment to the celery worker so it has access
     # to the JWT when making requests if needed, although strix scans are standalone.
     # Currently strix doesn't require a web token, but passing it is safe.
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else ""
     env_vars = {"STRIX_VIEWER_TOKEN": token} if token else {}
     start_scan.delay(cmd, run_name, env_vars)
     return {"ok": True, "run_name": run_name}
 
 @app.get("/api/admin/users")
-def get_admin_users(user: User = Depends(require_user)):
+def get_admin_users(admin: User = Depends(require_admin)):
     db = get_db()
     out = []
-    for u in db.query(User).filter(User.company == user.company).all():
+    # Super admin sees all users across the platform
+    for u in db.query(User).all():
         out.append({
+            "id": u.id,
             "email": u.email,
             "first_name": u.first_name,
             "last_name": u.last_name,
@@ -491,18 +538,20 @@ def get_admin_users(user: User = Depends(require_user)):
             "job_title": u.job_title,
             "phone": u.phone,
             "timezone": u.timezone,
-            "is_admin": u.is_admin
+            "is_admin": u.is_admin,
+            "is_suspended": u.is_suspended,
+            "admin_notes": u.admin_notes
         })
     return {"users": out}
 
 @app.post("/api/admin/users/add")
-async def add_admin_users(request: Request, user: User = Depends(require_user)):
+async def add_admin_users(request: Request, admin: User = Depends(require_admin)):
     body = await request.json()
     new_email = str(body.get("email") or "").strip()
     password = str(body.get("password") or "").strip()
     first_name = str(body.get("first_name") or "").strip()
     last_name = str(body.get("last_name") or "").strip()
-    company = user.company
+    company = str(body.get("company") or admin.company).strip()
     new_is_admin = bool(body.get("is_admin", False))
     
     if not new_email or not password or not first_name or not last_name:
@@ -529,7 +578,7 @@ async def add_admin_users(request: Request, user: User = Depends(require_user)):
     return {"ok": True}
 
 @app.delete("/api/admin/users")
-async def delete_admin_users(request: Request, user: User = Depends(require_user)):
+async def delete_admin_users(request: Request, admin: User = Depends(require_admin)):
     body = await request.json()
     target_email = str(body.get("email") or "").strip()
     if not target_email:
@@ -537,9 +586,9 @@ async def delete_admin_users(request: Request, user: User = Depends(require_user
         
     db = get_db()
     target_user = db.query(User).filter(User.email == target_email).first()
-    if not target_user or target_user.company != user.company:
+    if not target_user:
         return JSONResponse(status_code=400, content={"error": "invalid_user"})
-    if target_email == user.email:
+    if target_email == admin.email:
         return JSONResponse(status_code=400, content={"error": "unsupported method DELETE"})
         
     db.delete(target_user)
@@ -547,7 +596,7 @@ async def delete_admin_users(request: Request, user: User = Depends(require_user
     return {"ok": True}
 
 @app.post("/api/admin/users/edit")
-async def edit_admin_users(request: Request, user: User = Depends(require_user)):
+async def edit_admin_users(request: Request, admin: User = Depends(require_admin)):
     body = await request.json()
     target_email = str(body.get("email") or "").strip()
     if not target_email:
@@ -555,15 +604,155 @@ async def edit_admin_users(request: Request, user: User = Depends(require_user))
         
     db = get_db()
     target_user = db.query(User).filter(User.email == target_email).first()
-    if not target_user or target_user.company != user.company:
+    if not target_user:
         return JSONResponse(status_code=400, content={"error": "invalid_user"})
-    if target_email == user.email:
+    if target_email == admin.email:
         return JSONResponse(status_code=400, content={"error": "cannot_edit_self"})
         
     if "is_admin" in body:
         target_user.is_admin = bool(body["is_admin"])
     db.commit()
     return {"ok": True}
+
+# ==========================================
+# SUPER ADMIN ENDPOINTS (Require is_admin)
+# ==========================================
+
+@app.post("/api/admin/users/{user_id}/suspend")
+async def toggle_suspend_user(user_id: int, request: Request, admin: User = Depends(require_admin)):
+    body = await request.json()
+    suspend = bool(body.get("suspend", True))
+    db = get_db()
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+    if target_user.id == admin.id:
+        return JSONResponse(status_code=400, content={"error": "cannot_suspend_self"})
+        
+    target_user.is_suspended = suspend
+    
+    # Audit log
+    db.add(AuditLog(
+        action="suspend_user" if suspend else "unsuspend_user",
+        actor_email=admin.email,
+        target_email=target_user.email,
+        ip_address=request.client.host if request.client else "unknown"
+    ))
+    db.commit()
+    return {"ok": True, "is_suspended": suspend}
+
+@app.put("/api/admin/users/{user_id}/notes")
+async def update_user_notes(user_id: int, request: Request, admin: User = Depends(require_admin)):
+    body = await request.json()
+    notes = body.get("notes", "")
+    db = get_db()
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+        
+    target_user.admin_notes = notes
+    db.commit()
+    return {"ok": True}
+
+@app.get("/api/admin/global-runs")
+async def get_global_runs(admin: User = Depends(require_admin)):
+    db = get_db()
+    runs = db.query(Run).order_by(Run.created_at.desc()).limit(100).all()
+    # We should return status, but status is in json files, so we do same as standard runs
+    resp = []
+    for r in runs:
+        meta = read_run_summary(r.run_name)
+        status = meta.get("status", "unknown")
+        # include owner_email for global visibility
+        resp.append({
+            "run_name": r.run_name,
+            "owner_email": r.owner_email,
+            "status": status,
+            "company": r.company,
+            "created_at": r.created_at.isoformat()
+        })
+    return {"runs": resp}
+
+@app.post("/api/admin/global-runs/{run_name}/kill")
+async def kill_global_run(run_name: str, admin: User = Depends(require_admin)):
+    # To kill a Celery task, we normally need its task_id. Since we don't store task_id in DB, 
+    # we can try to find it, or we can use a workaround: write a kill signal file.
+    # We will use the existing steering mechanism or a stop marker.
+    db = get_db()
+    r = db.query(Run).filter(Run.run_name == run_name).first()
+    if not r:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+        
+    run_dir = run_record_path(run_name)
+    if run_dir.exists():
+        (run_dir / "stop_signal").write_text("killed_by_admin")
+        
+    db.add(AuditLog(
+        action="kill_run",
+        actor_email=admin.email,
+        details=f"Killed run {run_name}"
+    ))
+    db.commit()
+    return {"ok": True}
+
+@app.post("/api/admin/maintenance")
+async def toggle_maintenance(request: Request, admin: User = Depends(require_admin)):
+    body = await request.json()
+    enable = bool(body.get("enable", True))
+    
+    db = get_db()
+    setting = db.query(PlatformSetting).filter(PlatformSetting.key == "maintenance_mode").first()
+    if not setting:
+        setting = PlatformSetting(key="maintenance_mode", value=str(enable).lower())
+        db.add(setting)
+    else:
+        setting.value = str(enable).lower()
+        
+    db.add(AuditLog(
+        action="toggle_maintenance",
+        actor_email=admin.email,
+        details=f"Set maintenance to {enable}"
+    ))
+    db.commit()
+    return {"ok": True, "maintenance_mode": enable}
+
+@app.get("/api/admin/settings")
+async def get_admin_settings(admin: User = Depends(require_admin)):
+    db = get_db()
+    maintenance_setting = db.query(PlatformSetting).filter(PlatformSetting.key == "maintenance_mode").first()
+    m_mode = maintenance_setting.value.lower() == "true" if maintenance_setting else False
+    return {"maintenance_mode": m_mode}
+
+@app.get("/api/admin/audit-logs")
+async def get_audit_logs(admin: User = Depends(require_admin)):
+    db = get_db()
+    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+    return {"logs": [{
+        "id": l.id,
+        "action": l.action,
+        "actor_email": l.actor_email,
+        "target_email": l.target_email,
+        "ip_address": l.ip_address,
+        "details": l.details,
+        "created_at": l.created_at.isoformat()
+    } for l in logs]}
+
+@app.post("/api/admin/nuclei/update")
+async def update_nuclei_templates(admin: User = Depends(require_admin)):
+    db = get_db()
+    # Trigger nuclei update in background
+    try:
+        subprocess.Popen(["nuclei", "-update-templates"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        db.add(AuditLog(
+            action="update_nuclei",
+            actor_email=admin.email,
+            details="Triggered nuclei template update"
+        ))
+        db.commit()
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Failed to trigger nuclei update: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/api/profile")
 def get_profile(user: User = Depends(require_user)):
@@ -681,7 +870,7 @@ async def trigger_error():
 # SPA fallback
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str, request: Request):
-    assets_dir = app.state.assets_dir
+    assets_dir = getattr(app.state, "assets_dir", None) or bundle_dir()
     file_path = assets_dir / full_path
     
     if full_path.startswith("api/"):

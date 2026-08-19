@@ -301,9 +301,12 @@ export async function startScan(config: StartRunConfig): Promise<StartRunResult>
 }
 export async function checkSession(): Promise<boolean> {
   try {
+    console.log("checkSession: fetching /api/session");
     const res = await fetch("/api/session", { cache: "no-store", headers: getAuthHeader() });
+    console.log("checkSession: response ok?", res.ok);
     return res.ok;
-  } catch {
+  } catch (e) {
+    console.error("checkSession: error", e);
     return false;
   }
 }
@@ -367,14 +370,17 @@ export async function logout(): Promise<void> {
 }
 
 export interface AdminUser {
+  id: number;
   email: string;
   first_name: string;
   last_name: string;
   company: string;
-  job_title?: string;
-  phone?: string;
-  timezone?: string;
+  job_title: string;
+  phone: string;
+  timezone: string;
   is_admin: boolean;
+  is_suspended: boolean;
+  admin_notes: string;
 }
 
 export async function fetchAdminUsers(): Promise<AdminUser[]> {
@@ -428,4 +434,71 @@ export async function updateProfile(data: Partial<AdminUser> & { password?: stri
   if (!ok) {
     throw new Error(String(resData.error || "Failed to update profile"));
   }
+}
+
+// --- Super Admin Extensions ---
+
+export async function suspendUser(userId: number, suspend: boolean): Promise<void> {
+  const res = await fetch(`/api/admin/users/${userId}/suspend`, {
+    method: "POST",
+    headers: { ...getAuthHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ suspend })
+  });
+  if (!res.ok) throw new Error("Failed to suspend user");
+}
+
+
+
+export async function updateUserNotes(userId: number, notes: string): Promise<void> {
+  const res = await fetch(`/api/admin/users/${userId}/notes`, {
+    method: "PUT",
+    headers: { ...getAuthHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ notes })
+  });
+  if (!res.ok) throw new Error("Failed to update notes");
+}
+
+export async function fetchGlobalRuns(): Promise<any[]> {
+  const res = await fetch("/api/admin/global-runs", { headers: getAuthHeader() });
+  if (!res.ok) throw new Error("Failed to fetch global runs");
+  const data = await res.json();
+  return data.runs;
+}
+
+export async function killGlobalRun(runName: string): Promise<void> {
+  const res = await fetch(`/api/admin/global-runs/${runName}/kill`, {
+    method: "POST",
+    headers: getAuthHeader()
+  });
+  if (!res.ok) throw new Error("Failed to kill run");
+}
+
+export async function fetchAdminSettings(): Promise<{ maintenance_mode: boolean }> {
+  const res = await fetch("/api/admin/settings", { headers: getAuthHeader() });
+  if (!res.ok) throw new Error("Failed to fetch settings");
+  return res.json();
+}
+
+export async function toggleMaintenanceMode(enable: boolean): Promise<void> {
+  const res = await fetch("/api/admin/maintenance", {
+    method: "POST",
+    headers: { ...getAuthHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ enable })
+  });
+  if (!res.ok) throw new Error("Failed to toggle maintenance mode");
+}
+
+export async function updateNucleiTemplates(): Promise<void> {
+  const res = await fetch("/api/admin/nuclei/update", {
+    method: "POST",
+    headers: getAuthHeader()
+  });
+  if (!res.ok) throw new Error("Failed to trigger update");
+}
+
+export async function fetchAuditLogs(): Promise<any[]> {
+  const res = await fetch("/api/admin/audit-logs", { headers: getAuthHeader() });
+  if (!res.ok) throw new Error("Failed to fetch audit logs");
+  const data = await res.json();
+  return data.logs;
 }
