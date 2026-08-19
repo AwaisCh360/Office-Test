@@ -9,6 +9,8 @@ on:
       - 'Dockerfile'
       - '.dockerignore'
       - 'requirements.txt'
+      - '.github/workflows/**'
+  workflow_dispatch:
 
 jobs:
   build-and-push:
