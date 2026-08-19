@@ -33,9 +33,7 @@ services:
     restart: unless-stopped
 
   celery_worker:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/awaisch360/office-test/strix-worker:latest
     container_name: strix_celery_worker
     command: ["celery", "-A", "strix.interface.viewer.tasks", "worker", "--loglevel=info", "--concurrency=10"]
     volumes:
