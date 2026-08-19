@@ -1,9 +1,10 @@
 import os
 import subprocess
-import logging
 from celery import Celery
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
 
-logger = logging.getLogger(__name__)
+from strix.core.logger import logger
 
 # Configure Celery
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -24,6 +25,18 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=3600 * 2, # 2 hours max per scan
 )
+
+# Initialize Sentry for Celery Worker
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[CeleryIntegration()],
+        traces_sample_rate=1.0,
+        environment=os.environ.get("STRIX_ENV", "development"),
+    )
+    logger.info("Sentry integration initialized for Celery Worker.")
+
 
 @celery_app.task(bind=True, name="strix.scan")
 def start_scan(self, cmd: list, run_name: str, env: dict = None):

@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import logging
-import mimetypes
 import os
 import secrets
 import threading
@@ -27,8 +25,11 @@ import uvicorn
 import subprocess
 import sys
 import base64
-import shutil
 import redis
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+from strix.core.logger import logger
 
 # Redis for Distributed Rate Limiting
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -120,10 +121,19 @@ def _rate_limit(key: str) -> bool:
             return False
         return True
     except redis.RedisError as e:
-        logging.error(f"Redis rate limiting error: {e}")
+        logger.error(f"Redis rate limiting error: {e}")
         # Fail open if Redis is down
         return True
 
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[FastApiIntegration()],
+        traces_sample_rate=1.0,
+        environment=os.environ.get("STRIX_ENV", "development"),
+    )
+    logger.info("Sentry integration initialized for FastAPI.")
 
 app = FastAPI(title="Strix Viewer API")
 
@@ -350,7 +360,7 @@ async def delete_run(request: Request, user: User = Depends(require_user)):
             db.commit()
         return {"ok": True}
     except Exception as e:
-        logger.error(f"failed to delete run {run_name}: {e}")
+        logger.exception(f"failed to delete run {run_name}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/api/run/start")
@@ -396,7 +406,7 @@ async def start_run(request: Request, user: User = Depends(require_user)):
         db.add(new_run)
         db.commit()
     except Exception as e:
-        logger.error("Failed to add run to DB: %s", e)
+        logger.exception("Failed to add run to DB")
         db.rollback()
 
     cmd = [sys.executable, "-m", "strix", "--scan-mode", scan_mode, "--scope-mode", scope_mode, "--run-name", run_name, "--non-interactive"]
@@ -413,6 +423,7 @@ async def start_run(request: Request, user: User = Depends(require_user)):
             path.write_bytes(base64.b64decode(b64))
             cmd.extend(["--target-list", str(path)])
         except Exception as e:
+            logger.exception("invalid target_list_file")
             return JSONResponse(status_code=400, content={"error": "invalid target_list_file"})
             
     if instruction:
@@ -426,6 +437,7 @@ async def start_run(request: Request, user: User = Depends(require_user)):
             path.write_bytes(base64.b64decode(b64))
             cmd.extend(["--instruction-file", str(path)])
         except Exception as e:
+            logger.exception("invalid instruction_file")
             return JSONResponse(status_code=400, content={"error": "invalid instruction_file"})
             
     if config_file and isinstance(config_file, dict):
@@ -436,6 +448,7 @@ async def start_run(request: Request, user: User = Depends(require_user)):
             path.write_bytes(base64.b64decode(b64))
             cmd.extend(["--config", str(path)])
         except Exception as e:
+            logger.exception("invalid config_file")
             return JSONResponse(status_code=400, content={"error": "invalid config_file"})
             
     if max_budget is not None:
@@ -452,6 +465,7 @@ async def start_run(request: Request, user: User = Depends(require_user)):
                 path.write_bytes(base64.b64decode(b64))
                 cmd.extend(["--workspace-file", f"{path}:{name}"])
             except Exception as e:
+                logger.exception("invalid workspace_files")
                 return JSONResponse(status_code=400, content={"error": "invalid workspace_files"})
         
     logger.info("Viewer starting new scan via Celery: %r", cmd)
@@ -657,6 +671,13 @@ async def steer_agent(request: Request, user: User = Depends(require_user)):
         return {"ok": True}
     return {"ok": False, "error": "not_delivered"}
 
+@app.get("/api/debug-sentry")
+async def trigger_error():
+    """Dummy endpoint to test Sentry and Logging."""
+    logger.info("Triggering intentional zero division error to test Sentry.")
+    division_by_zero = 1 / 0
+    return {"ok": True}
+
 # SPA fallback
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str, request: Request):
@@ -680,7 +701,6 @@ async def serve_spa(full_path: str, request: Request):
                     max_age=86400    # 24 hours
                 )
                 return response
-        return FileResponse(file_path)
         return FileResponse(file_path)
         
     # SPA fallback
@@ -712,6 +732,9 @@ def serve(
     open_browser: bool = True,
     steer_handler: Callable[[str, str], bool] | None = None,
 ) -> tuple[Any, str, str]:
+    import sentry_sdk
+    sentry_sdk.init(dsn=os.environ.get("SENTRY_DSN", ""), traces_sample_rate=1.0)
+    
     assets_dir = bundle_dir()
     
     app.state.run_dir = run_dir
@@ -750,7 +773,7 @@ def serve(
                         db.add(new_user)
                     db.commit()
                 except Exception as e:
-                    logger.error("Failed to migrate users.json: %s", e)
+                    logger.exception("Failed to migrate users.json")
 
     import socket
     if port == 0:
