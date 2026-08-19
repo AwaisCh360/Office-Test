@@ -28,6 +28,11 @@ import subprocess
 import sys
 import base64
 import shutil
+import redis
+
+# Redis for Distributed Rate Limiting
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 from strix.core.paths import run_record_path
 from strix.interface.viewer import auth
@@ -98,41 +103,51 @@ def _check_password(password: str, stored_hash: str) -> bool:
     except Exception:
         return False
 
-def _generate_jwt(email: str) -> str:
-    payload = {
-        "email": email,
-        "exp": time.time() + 7200
-    }
+def create_jwt_token(payload: dict) -> str:
+    payload["exp"] = time.time() + (24 * 3600)  # 24 hour expiry
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 def _rate_limit(key: str) -> bool:
-    now = time.time()
-    count, last_reset = rate_limits.get(key, (0, now))
-    if now - last_reset > 60:
-        count = 0
-        last_reset = now
-    if count >= 5:
-        return False
-    rate_limits[key] = (count + 1, last_reset)
-    return True
+    """Redis-backed distributed rate limiter"""
+    try:
+        # Increment the key, and set expiry to 60s if it's new
+        count = redis_client.incr(f"ratelimit:{key}")
+        if count == 1:
+            redis_client.expire(f"ratelimit:{key}", 60)
+        
+        # Max 5 requests per minute
+        if count > 5:
+            return False
+        return True
+    except redis.RedisError as e:
+        logging.error(f"Redis rate limiting error: {e}")
+        # Fail open if Redis is down
+        return True
 
 
 app = FastAPI(title="Strix Viewer API")
+
+# Strict CORS Policy
+origins = [
+    "http://localhost",
+    "http://localhost:5050",
+    "https://localhost",
+    # Add production domain here later
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 app.state.run_dir = None
 app.state.base_dir = None
 app.state.assets_dir = None
 app.state.steer_handler = None
 app.state.session_token = None
 app.state.cookie_name = SESSION_COOKIE_PREFIX
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 def get_current_user(request: Request) -> User | None:
@@ -192,8 +207,17 @@ async def login(request: Request):
             user.password_hash = _hash_password(password)
             db.commit()
             
-        token = _generate_jwt(email)
-        return {"token": token, "email": email}
+        token = create_jwt_token({"email": email})
+        response = JSONResponse(content={"token": token, "email": email})
+        response.set_cookie(
+            key=SESSION_COOKIE_PREFIX, 
+            value=token, 
+            httponly=True,
+            secure=True,     # Enforce HTTPS
+            samesite="lax",  # Prevent CSRF
+            max_age=86400    # 24 hours
+        )
+        return response
     
     return JSONResponse(status_code=401, content={"error": "invalid_credentials"})
 
@@ -232,9 +256,17 @@ async def signup(request: Request):
     )
     db.add(new_user)
     db.commit()
-    
-    token = _generate_jwt(email)
-    return {"token": token, "email": email}
+    token = create_jwt_token({"email": email})
+    response = JSONResponse(content={"token": token, "email": email})
+    response.set_cookie(
+        key=SESSION_COOKIE_PREFIX, 
+        value=token, 
+        httponly=True,
+        secure=True,     # Enforce HTTPS
+        samesite="lax",  # Prevent CSRF
+        max_age=86400    # 24 hours
+    )
+    return response
 
 @app.post("/api/logout")
 def logout():
@@ -640,13 +672,15 @@ async def serve_spa(full_path: str, request: Request):
             if token and secrets.compare_digest(token, app.state.session_token):
                 response = FileResponse(file_path)
                 response.set_cookie(
-                    key=app.state.cookie_name,
-                    value=app.state.session_token,
-                    path="/",
+                    key=SESSION_COOKIE_PREFIX, 
+                    value=token, 
                     httponly=True,
-                    samesite="strict"
+                    secure=True,     # Enforce HTTPS
+                    samesite="lax",  # Prevent CSRF
+                    max_age=86400    # 24 hours
                 )
                 return response
+        return FileResponse(file_path)
         return FileResponse(file_path)
         
     # SPA fallback
