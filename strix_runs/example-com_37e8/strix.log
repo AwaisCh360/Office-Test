@@ -1,0 +1,54 @@
+2026-08-19 15:29:54.881 INFO    example-com_37e8 - strix.core.runner: Starting Strix scan example-com_37e8 (image=ghcr.io/usestrix/strix-sandbox:1.3.0, max_turns=500, interactive=False, run_dir=/Users/bit/Desktop/Office/strix_runs/example-com_37e8)
+2026-08-19 15:29:54.881 INFO    example-com_37e8 - strix.core.runner: LLM model resolved: mistral/mistral-large-latest
+2026-08-19 15:29:54.881 INFO    example-com_37e8 - strix.core.runner: Bringing up sandbox session for scan example-com_37e8
+2026-08-19 15:29:54.881 DEBUG   example-com_37e8 - strix.runtime.backends: Selected sandbox backend: docker
+2026-08-19 15:29:54.881 INFO    example-com_37e8 - strix.runtime.session_manager: Creating sandbox session for scan example-com_37e8 (backend=docker, image=ghcr.io/usestrix/strix-sandbox:1.3.0)
+2026-08-19 15:29:55.148 DEBUG   example-com_37e8 - strix.runtime.docker_client: Creating sandbox container: image=ghcr.io/usestrix/strix-sandbox:1.3.0 caps=['NET_ADMIN', 'NET_RAW'] exposed_ports=[48080]
+2026-08-19 15:29:55.307 INFO    example-com_37e8 - strix.runtime.docker_client: Sandbox container created: id=a14d90b58c13 image=ghcr.io/usestrix/strix-sandbox:1.3.0
+2026-08-19 15:29:56.016 DEBUG   example-com_37e8 - strix.runtime.session_manager: Caido host endpoint resolved: http://127.0.0.1:52644
+2026-08-19 15:29:56.017 INFO    example-com_37e8 - strix.runtime.caido_bootstrap: Bootstrapping Caido client (host=http://127.0.0.1:52644, container=http://127.0.0.1:48080)
+2026-08-19 15:29:56.140 DEBUG   example-com_37e8 - strix.runtime.caido_bootstrap: loginAsGuest attempt 1/10 failed: curl exit 7: curl: (7) Failed to connect to 127.0.0.1 port 48080 after 0 ms: Could not connect to server
+
+2026-08-19 15:29:58.424 INFO    example-com_37e8 - strix.runtime.caido_bootstrap: Caido project selected: c12e5ac4-8de1-4218-afe5-e99bd85ef0a3
+2026-08-19 15:29:58.424 INFO    example-com_37e8 - strix.runtime.session_manager: Sandbox session for scan example-com_37e8 ready and cached
+2026-08-19 15:29:58.424 INFO    example-com_37e8 - strix.core.runner: Sandbox ready for scan example-com_37e8
+2026-08-19 15:29:58.428 DEBUG   example-com_37e8 - strix.skills: Loaded skill: scan_modes/quick -> quick
+2026-08-19 15:29:58.431 DEBUG   example-com_37e8 - strix.skills: Loaded skill: tooling/agent_browser -> agent_browser
+2026-08-19 15:29:58.433 DEBUG   example-com_37e8 - strix.skills: Loaded skill: tooling/python -> python
+2026-08-19 15:29:58.437 DEBUG   example-com_37e8 - strix.skills: Loaded skill: coordination/root_agent -> root_agent
+2026-08-19 15:29:58.438 DEBUG   example-com_37e8 - strix.skills: load_skills: 4 skill(s) resolved
+2026-08-19 15:29:58.483 DEBUG   example-com_37e8 - strix.agents.prompt: render_system_prompt: scan_mode=quick root=True whitebox=False skills=4 prompt_len=74122
+2026-08-19 15:29:58.483 INFO    example-com_37e8 - strix.agents.factory: Built root agent 'Root Agent' (skills=0, tools=30, scan_mode=quick, whitebox=False)
+2026-08-19 15:29:58.483 INFO    example-com_37e8 - strix.core.agents: agent.register 9d3830a8 (Root Agent) parent=-
+2026-08-19 15:29:58.497 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating trace
+2026-08-19 15:29:58.500 DEBUG   example-com_37e8 - openai.agents: Setting current trace: no-op
+2026-08-19 15:29:58.500 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:29:58.514 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:29:58.514 DEBUG   example-com_37e8 - openai.agents: Starting turn 1, current_agent=Root Agent
+2026-08-19 15:29:58.514 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:29:58.516 DEBUG   example-com_37e8 - openai.agents: No conversation_id available for request
+2026-08-19 15:29:58.516 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:29:58.519 DEBUG   example-com_37e8 - openai.agents: Calling LLM
+2026-08-19 15:29:59.290 DEBUG   - - strix.telemetry.posthog: posthog event sent: skill_loaded
+2026-08-19 15:29:59.291 DEBUG   - - strix.telemetry.posthog: posthog event sent: skill_loaded
+2026-08-19 15:29:59.333 DEBUG   - - strix.telemetry.posthog: posthog event sent: skill_loaded
+2026-08-19 15:29:59.334 DEBUG   - - strix.telemetry.posthog: posthog event sent: skill_loaded
+2026-08-19 15:30:00.216 DEBUG   - - strix.telemetry.scarf: scarf event sent: skill_loaded
+2026-08-19 15:30:00.255 DEBUG   - - strix.telemetry.scarf: scarf event sent: skill_loaded
+2026-08-19 15:30:00.259 DEBUG   - - strix.telemetry.scarf: scarf event sent: skill_loaded
+2026-08-19 15:30:00.318 DEBUG   - - strix.telemetry.scarf: scarf event sent: skill_loaded
+2026-08-19 15:30:16.001 INFO    example-com_37e8 - strix.report.sarif: Wrote SARIF 2.1.0 report: /Users/bit/Desktop/Office/strix_runs/example-com_37e8/findings.sarif (0 results)
+2026-08-19 15:30:16.002 INFO    example-com_37e8 - strix.report.state: Essential scan data saved to: /Users/bit/Desktop/Office/strix_runs/example-com_37e8
+2026-08-19 15:30:16.003 DEBUG   example-com_37e8 - openai.agents: Processing output item type=message class=ResponseOutputMessage
+2026-08-19 15:30:16.004 DEBUG   example-com_37e8 - openai.agents: Turn 1 complete, next_step type=NextStepFinalOutput
+2026-08-19 15:30:16.009 DEBUG   example-com_37e8 - openai.agents: Resetting current trace
+2026-08-19 15:30:16.010 WARNING example-com_37e8 - strix.core.execution: agent 9d3830a8 ended a turn without a lifecycle tool call (interactive=False); forcing tool continuation (1/500): think{"thought": "I am the root agent for this security assessment. My role is orchestration, not hands-on testing. The target is a single web application: https://example.com.\n\nMy immediate next steps:\n1. Decompose the target into attack surfaces and testing priorities.\n2. Spawn specialized sub
+2026-08-19 15:30:16.019 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating trace
+2026-08-19 15:30:16.021 DEBUG   example-com_37e8 - openai.agents: Setting current trace: no-op
+2026-08-19 15:30:16.021 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:30:16.037 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:30:16.037 DEBUG   example-com_37e8 - openai.agents: Starting turn 1, current_agent=Root Agent
+2026-08-19 15:30:16.037 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:30:16.039 DEBUG   example-com_37e8 - openai.agents: No conversation_id available for request
+2026-08-19 15:30:16.039 DEBUG   example-com_37e8 - openai.agents: Tracing is disabled. Not creating span
+2026-08-19 15:30:16.042 DEBUG   example-com_37e8 - openai.agents: Calling LLM

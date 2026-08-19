@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --surface: #ffffff;
+    --hover: #f3f4f6;
+    --inset: #f9fafb;
+    --accent: #2563eb;
+    --accent-tint: #eff6ff;
+    --accent-ink: #1d4ed8;
+    --ink: #111827;
+    --ink-2: #374151;
+    --ink-3: #6b7280;
+    --line: #e5e7eb;
+    
+    --shadow-raised: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-hairline: inset 0 0 0 1px rgb(0 0 0 / 0.05);
+    
+    --radius-card: 16px;
+    --radius-control: 8px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #111111;
+      --hover: #1f1f1f;
+      --inset: #0a0a0a;
+      --accent: #3b82f6;
+      --accent-tint: #1e3a8a;
+      --accent-ink: #bfdbfe;
+      --ink: #f9fafb;
+      --ink-2: #e5e7eb;
+      --ink-3: #9ca3af;
+      --line: #262626;
+      
+      --shadow-raised: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+      --shadow-hairline: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+    }
+  }
+
+  body {
+    @apply bg-inset text-ink antialiased min-h-screen font-sans;
+  }
+}

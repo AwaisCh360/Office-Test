@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: strix_db
+    environment:
+      POSTGRES_USER: strix_user
+      POSTGRES_PASSWORD: strix_password
+      POSTGRES_DB: strix_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: strix_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    container_name: strix_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  celery_worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: strix_celery_worker
+    command: ["celery", "-A", "strix.interface.viewer.tasks", "worker", "--loglevel=info", "--concurrency=10"]
+    volumes:
+      - ./strix_runs:/app/strix_runs
+      # Mount docker socket so celery worker can spawn sandbox containers via strix cli
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - STRIX_DB_URL=postgresql://strix_user:strix_password@postgres/strix_db
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

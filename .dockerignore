@@ -1,0 +1,7 @@
+env/
+.git/
+__pycache__/
+*.pyc
+strix_runs/
+node_modules/
+.pytest_cache/
