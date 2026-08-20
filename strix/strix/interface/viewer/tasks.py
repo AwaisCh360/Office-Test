@@ -47,6 +47,10 @@ def start_scan(self, cmd: list, run_name: str, env: dict = None):
     subprocess_env = os.environ.copy()
     if env:
         subprocess_env.update(env)
+        
+    import sys
+    if "python" in cmd[0]:
+        cmd[0] = sys.executable
 
     logger.info(f"Starting scan for {run_name} with command: {cmd}")
     
