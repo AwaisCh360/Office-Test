@@ -328,16 +328,31 @@ def list_runs(user: User | None = Depends(get_current_user)):
     return {"locked": False, "count": len(filtered), "runs": [run_list_entry(d) for d in filtered]}
 
 def resolve_authorized_run(run: str | None, user: User | None, state) -> Path | None:
+    if not run and not state.run_dir:
+        db = get_db()
+        if user:
+            db_run = db.query(Run).filter(Run.company == user.company).order_by(Run.id.desc()).first()
+            if db_run:
+                run = db_run.run_name
+        else:
+            run_dirs = _iter_run_dirs(state.base_dir)
+            if run_dirs:
+                run = run_dirs[0].name
+
     run_dir = resolve_run_dir(state.base_dir, run, state.run_dir)
     if not run_dir:
         return None
-    if run_dir.resolve() != state.run_dir.resolve():
+        
+    if state.run_dir and run_dir.resolve() != state.run_dir.resolve():
         if not user:
             return None
+            
+    if user:
         db = get_db()
         db_run = db.query(Run).filter(Run.run_name == run_dir.name).first()
         if db_run and db_run.company != user.company:
             return None
+            
     return run_dir
 
 @app.get("/api/run")
