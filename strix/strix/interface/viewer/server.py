@@ -473,7 +473,7 @@ async def start_run(request: Request, user: User = Depends(require_user)):
     }
     (run_dir / "run.json").write_text(json.dumps(initial_summary), encoding="utf-8")
 
-    cmd = [sys.executable, "-m", "strix", "--scan-mode", scan_mode, "--scope-mode", scope_mode, "--run-name", run_name, "--non-interactive"]
+    cmd = [sys.executable, "-m", "strix.interface.main", "--scan-mode", scan_mode, "--scope-mode", scope_mode, "--run-name", run_name, "--non-interactive"]
     if diff_base:
         cmd.extend(["--diff-base", diff_base])
     for t in targets:
@@ -541,6 +541,12 @@ async def start_run(request: Request, user: User = Depends(require_user)):
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else ""
     env_vars = {"STRIX_VIEWER_TOKEN": token} if token else {}
+    
+    forward_keys = ["STRIX_LLM", "LLM_API_KEY", "LLM_API_BASE", "PERPLEXITY_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+    for k in forward_keys:
+        if k in os.environ:
+            env_vars[k] = os.environ[k]
+            
     start_scan.delay(cmd, run_name, env_vars)
     return {"ok": True, "run_name": run_name}
 
