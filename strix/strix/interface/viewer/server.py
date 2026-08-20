@@ -359,6 +359,8 @@ def resolve_authorized_run(run: str | None, user: User | None, state) -> Path | 
 def get_run(run: str | None = None, user: User | None = Depends(get_current_user)):
     run_dir = resolve_authorized_run(run, user, app.state)
     if not run_dir:
+        if not run:
+            return {"run_name": "no_runs", "status": "no_runs", "finished": True}
         raise HTTPException(status_code=404, detail="unknown run or forbidden")
     return read_run_summary(run_dir)
 
@@ -366,6 +368,8 @@ def get_run(run: str | None = None, user: User | None = Depends(get_current_user
 def get_vulns(run: str | None = None, user: User | None = Depends(get_current_user)):
     run_dir = resolve_authorized_run(run, user, app.state)
     if not run_dir:
+        if not run:
+            return []
         raise HTTPException(status_code=404, detail="unknown run or forbidden")
     return read_vulnerabilities(run_dir)
 
@@ -380,6 +384,8 @@ def get_report(run: str | None = None, user: User | None = Depends(get_current_u
 def get_transcript(run: str | None = None, user: User | None = Depends(get_current_user)):
     run_dir = resolve_authorized_run(run, user, app.state)
     if not run_dir:
+        if not run:
+            return {"agents": [], "events": []}
         raise HTTPException(status_code=404, detail="unknown run or forbidden")
     return build_run_state(run_dir)
 
