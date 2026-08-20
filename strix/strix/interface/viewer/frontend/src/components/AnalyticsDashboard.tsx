@@ -29,8 +29,8 @@ export default function AnalyticsDashboard({ runs, onNewScan, onViewRun }: Analy
       low += r.severity_counts.low;
 
       if (r.finished && r.start_time && r.end_time) {
-        const start = new Date(r.start_time).getTime();
-        const end = new Date(r.end_time).getTime();
+        const start = typeof r.start_time === "number" ? r.start_time * 1000 : new Date(r.start_time).getTime();
+        const end = typeof r.end_time === "number" ? r.end_time * 1000 : new Date(r.end_time).getTime();
         totalTimeMs += end - start;
       }
     }

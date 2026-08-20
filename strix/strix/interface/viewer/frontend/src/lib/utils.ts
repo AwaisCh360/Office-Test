@@ -5,8 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatDate(dateString: string): string {
-  const date = new Date(dateString);
+export function formatDate(dateString: string | number): string {
+  const normalized = typeof dateString === "number" ? dateString * 1000 : dateString;
+  const date = new Date(normalized);
   return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -78,8 +79,9 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-export function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString);
+export function formatTimeAgo(dateString: string | number): string {
+  const normalized = typeof dateString === "number" ? dateString * 1000 : dateString;
+  const date = new Date(normalized);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -101,8 +103,9 @@ export function formatTimeAgo(dateString: string): string {
   return formatDate(dateString);
 }
 
-export function formatTimeUntil(dateString: string): string {
-  const date = new Date(dateString);
+export function formatTimeUntil(dateString: string | number): string {
+  const normalized = typeof dateString === "number" ? dateString * 1000 : dateString;
+  const date = new Date(normalized);
   const now = new Date();
   const diffInSeconds = Math.floor((date.getTime() - now.getTime()) / 1000);
 

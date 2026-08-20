@@ -36,9 +36,14 @@ function SeverityChips({ counts }: { counts: RunSeverityCounts }) {
   );
 }
 
-function formatDate(iso: string | null): string | null {
+function formatDate(iso: string | number | null): string | null {
   if (!iso) return null;
-  const normalized = iso.trim().replace(" UTC", "Z").replace(" ", "T");
+  let normalized: string | number = iso;
+  if (typeof iso === "string") {
+    normalized = iso.trim().replace(" UTC", "Z").replace(" ", "T");
+  } else if (typeof iso === "number") {
+    normalized = iso * 1000; // Convert Python seconds to JS milliseconds
+  }
   const d = new Date(normalized);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleString(undefined, {
@@ -53,9 +58,14 @@ function formatDate(iso: string | null): string | null {
  * Relative time ("just now" / "5m ago" / "3h ago" / "2d ago"), falling back to
  * the absolute date for anything older than a week (mirrors the pro app).
  */
-function formatTimeAgo(iso: string | null): string | null {
+function formatTimeAgo(iso: string | number | null): string | null {
   if (!iso) return null;
-  const normalized = iso.trim().replace(" UTC", "Z").replace(" ", "T");
+  let normalized: string | number = iso;
+  if (typeof iso === "string") {
+    normalized = iso.trim().replace(" UTC", "Z").replace(" ", "T");
+  } else if (typeof iso === "number") {
+    normalized = iso * 1000; // Convert Python seconds to JS milliseconds
+  }
   const d = new Date(normalized);
   if (Number.isNaN(d.getTime())) return null;
   const diffMs = Date.now() - d.getTime();
