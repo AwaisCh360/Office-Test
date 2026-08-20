@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import logging
+import os
 import uuid
 from collections.abc import Callable
 from pathlib import Path
