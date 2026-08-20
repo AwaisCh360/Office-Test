@@ -258,15 +258,6 @@ export default function Sidebar({
               active={view === "issues"}
               onClick={() => onSelectView("issues")}
             />
-            {agentCount > 0 && (
-              <NavItem
-                icon={<Bot className="h-4 w-4" />}
-                label="Agents"
-                count={agentCount}
-                active={view === "agents"}
-                onClick={() => onSelectView("agents")}
-              />
-            )}
             <NavItem
               icon={<History className="h-4 w-4" />}
               label="Past runs"

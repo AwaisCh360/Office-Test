@@ -111,19 +111,8 @@ export default function DashboardView({ onScanStarted }: DashboardViewProps) {
 
       const result = await startScan(payload);
       
-      let retries = 0;
-      while (retries < 60) {
-        try {
-          const run = await fetchRunSummary(result.run_name);
-          if (run && run.summary && run.summary.status !== "initializing") {
-            break;
-          }
-        } catch (e) {
-          // ignore network errors while polling
-        }
-        await new Promise((r) => setTimeout(r, 1000));
-        retries++;
-      }
+      // The server already creates a placeholder run.json with status="initializing".
+      // We can redirect to the overview page immediately.
       
       onScanStarted(result.run_name);
     } catch (e) {

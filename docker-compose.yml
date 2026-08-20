@@ -44,9 +44,13 @@ services:
       - ./strix:/app/strix
       # Mount docker socket so celery worker can spawn sandbox containers via strix cli
       - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
     environment:
       - REDIS_URL=redis://redis:6379/0
       - STRIX_DB_URL=postgresql://strix_user:strix_password@postgres/strix_db
+      - STRIX_DOCKER_SANDBOX_NETWORK=office_default
+      - STRIX_BASE_DIR=/app/strix_runs
     depends_on:
       - redis
       - postgres

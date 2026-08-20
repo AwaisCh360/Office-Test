@@ -10,7 +10,11 @@ RUNTIME_STATE_DIR_NAME = ".state"
 RUN_RECORD_FILENAME = "run.json"
 
 
+import os
+
 def run_dir_for(run_name: str, *, cwd: Path | None = None) -> Path:
+    if os.environ.get("STRIX_BASE_DIR"):
+        return Path(os.environ["STRIX_BASE_DIR"]) / run_name
     base = cwd or Path.cwd()
     return base / RUNS_DIR_NAME / run_name
 
@@ -24,6 +28,8 @@ def run_record_path(run_dir: Path) -> Path:
 
 
 def runs_base_dir(*, cwd: Path | None = None) -> Path:
+    if os.environ.get("STRIX_BASE_DIR"):
+        return Path(os.environ["STRIX_BASE_DIR"])
     base = cwd or Path.cwd()
     return base / RUNS_DIR_NAME
 

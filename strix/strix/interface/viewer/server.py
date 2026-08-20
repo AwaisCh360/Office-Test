@@ -8,6 +8,17 @@ import threading
 import uuid
 import webbrowser
 import bcrypt
+import yaml
+import shutil
+import base64
+from urllib.parse import urlparse
+try:
+    from dotenv import load_dotenv
+    # Search for .env from the current working directory upwards
+    load_dotenv()
+except ImportError:
+    pass
+
 import jwt
 import time
 import re
@@ -406,6 +417,12 @@ async def delete_run(request: Request, user: User = Depends(require_user)):
     if db_run and db_run.company != user.company:
         return JSONResponse(status_code=403, content={"error": "forbidden"})
         
+    try:
+        from strix.interface.viewer.tasks import kill_scan
+        kill_scan.delay(run_name)
+    except Exception as e:
+        logger.warning(f"Failed to dispatch kill_scan task for {run_name}: {e}")
+
     try:
         shutil.rmtree(run_dir)
         if db_run:
@@ -831,7 +848,8 @@ async def update_profile(request: Request, user: User = Depends(require_user)):
 
 @app.get("/api/capabilities")
 def get_caps():
-    return {"can_steer": app.state.steer_handler is not None}
+    # We now support steering via Redis Pub/Sub in the web UI mode
+    return {"can_steer": True}
 
 @app.post("/api/report/send")
 async def send_report(request: Request, user: User = Depends(require_user)):
@@ -874,18 +892,26 @@ async def handle_event(request: Request):
 @app.post("/api/agents/steer")
 async def steer_agent(request: Request, user: User = Depends(require_user)):
     body = await request.json()
-    agent_id = str(body.get("agent_id") or "").strip()
-    message = str(body.get("message") or "").strip()
-    if not agent_id or not message:
-        return JSONResponse(status_code=400, content={"error": "invalid_input"})
-    message = message[:4000]
-    
-    if app.state.steer_handler is None:
-        return JSONResponse(status_code=403, content={"error": "steering_unavailable"})
-    delivered = app.state.steer_handler(agent_id, message)
-    if delivered:
+    agent_id = body.get("agent_id")
+    message = body.get("message")
+    run_name = body.get("run_name")
+    if not agent_id or not message or not run_name:
+        return JSONResponse(status_code=400, content={"error": "missing fields"})
+        
+    # Send steering message via Redis Pub/Sub
+    try:
+        import json
+        import redis
+        from strix.telemetry import posthog
+        redis_client = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+        payload = json.dumps({"agent_id": agent_id, "message": message})
+        redis_client.publish(f"strix:steer:{run_name}", payload)
+        
+        posthog.viewer_agent_steered()
         return {"ok": True}
-    return {"ok": False, "error": "not_delivered"}
+    except Exception as e:
+        logger.error(f"Failed to publish steering message to Redis: {e}")
+        return JSONResponse(status_code=500, content={"error": "steering_failed"})
 
 @app.get("/api/debug-sentry")
 async def trigger_error():
@@ -1025,3 +1051,7 @@ def _open_browser(url: str) -> None:
         logger.debug("could not open browser for %s", url, exc_info=True)
 
 __all__ = ["authorized_url", "bundle_dir", "bundle_is_built", "serve"]
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5050)

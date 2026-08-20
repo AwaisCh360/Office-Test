@@ -594,6 +594,9 @@ def _mirror_api_key_to_provider_env(model_name: str | None, api_key: str) -> Non
 
 def _configure_litellm_compatibility() -> None:
     """Apply LiteLLM compatibility, privacy, and callback settings."""
+    import os
+    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    
     import litellm
 
     litellm.drop_params = True

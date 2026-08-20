@@ -35,12 +35,14 @@ export function AgentDetailModal({
   agent,
   events,
   steerable,
+  runName,
   onClose,
 }: {
   open: boolean;
   agent: TranscriptAgent | null;
   events: TranscriptEvent[];
   steerable: boolean;
+  runName: string;
   onClose: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -155,6 +157,7 @@ export function AgentDetailModal({
             <ScanPromptComposer
               agents={[shownAgent]}
               fixedAgentId={shownAgent.id}
+              runName={runName}
               className="mt-0"
             />
           </div>

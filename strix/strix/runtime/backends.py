@@ -39,6 +39,59 @@ async def _docker_backend(
     """
     import docker
     from agents.sandbox.sandboxes.docker import DockerSandboxClientOptions
+    from agents.sandbox.sandboxes.docker import DockerSandboxSession
+    from agents.sandbox.session.base_sandbox_session import ExecResult
+    import asyncio
+    import subprocess
+
+    async def _patched_exec_run(
+        self,
+        *,
+        cmd,
+        workdir,
+        user,
+        timeout,
+        command_for_errors,
+        kill_on_timeout,
+    ):
+        docker_cmd = ["docker", "exec"]
+        if user:
+            docker_cmd.extend(["-u", user])
+        if workdir:
+            docker_cmd.extend(["-w", workdir])
+        docker_cmd.append(self.state.container_id)
+        docker_cmd.extend(cmd)
+
+        loop = asyncio.get_running_loop()
+        try:
+            proc = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    docker_cmd, capture_output=True, timeout=timeout
+                ),
+            )
+            return ExecResult(
+                stdout=proc.stdout or b"",
+                stderr=proc.stderr or b"",
+                exit_code=proc.returncode,
+            )
+        except subprocess.TimeoutExpired as e:
+            from agents.sandbox.errors import ExecTimeoutError
+            if kill_on_timeout:
+                try:
+                    pattern = " ".join(str(c) for c in command_for_errors).replace("'", "'\\''")
+                    subprocess.run(
+                        ["docker", "exec", self.state.container_id, "sh", "-lc", f"pkill -f -- '{pattern}' >/dev/null 2>&1 || true"],
+                        capture_output=True, timeout=5
+                    )
+                except Exception:
+                    pass
+            raise ExecTimeoutError(command=command_for_errors, timeout_s=timeout, cause=e) from e
+        except Exception as e:
+            from agents.sandbox.errors import ExecTransportError
+            raise ExecTransportError(command=command_for_errors, cause=e) from e
+
+    DockerSandboxSession._exec_run = _patched_exec_run
 
     from strix.runtime.docker_client import StrixDockerSandboxClient
 

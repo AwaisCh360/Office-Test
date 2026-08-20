@@ -209,8 +209,9 @@ export async function fetchCapabilities(): Promise<Capabilities> {
 }
 
 /** POST /api/agents/steer. Sends a steering instruction to a running agent. */
-export async function steerAgent(agentId: string, message: string): Promise<SteerResult> {
+export async function steerAgent(runName: string, agentId: string, message: string): Promise<SteerResult> {
   const { ok, data } = await postJson("/api/agents/steer", {
+    run_name: runName,
     agent_id: agentId,
     message,
   });

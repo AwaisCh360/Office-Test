@@ -65,8 +65,42 @@ def start_scan(self, cmd: list, run_name: str, env: dict = None):
             check=False
         )
         
+        base_dir = os.environ.get("STRIX_BASE_DIR", "/app/strix_runs")
+        run_dir_path = Path(base_dir) / run_name
+        
+        # Write logs to strix.log
+        if run_dir_path.exists():
+            log_path = run_dir_path / "strix.log"
+            try:
+                with open(log_path, "w") as f:
+                    if result.stdout:
+                        f.write("--- STDOUT ---\n")
+                        f.write(result.stdout)
+                        f.write("\n")
+                    if result.stderr:
+                        f.write("--- STDERR ---\n")
+                        f.write(result.stderr)
+                        f.write("\n")
+            except Exception as e:
+                logger.error(f"Failed to write strix.log for {run_name}: {e}")
+
         if result.returncode != 0:
-            logger.error(f"Scan {run_name} failed: {result.stderr}")
+            logger.error(f"Scan {run_name} failed. Check strix.log in run directory.")
+            # Update run.json to failed status
+            try:
+                import json
+                run_json_path = run_dir_path / "run.json"
+                if run_json_path.exists():
+                    with open(run_json_path, "r") as f:
+                        run_data = json.load(f)
+                    run_data["status"] = "failed"
+                    run_data["error"] = "Process exited with code " + str(result.returncode)
+
+                    with open(run_json_path, "w") as f:
+                        json.dump(run_data, f)
+            except Exception as e:
+                logger.error(f"Failed to update run.json for {run_name}: {e}")
+                
             return {"status": "failed", "error": result.stderr}
             
         logger.info(f"Scan {run_name} completed successfully.")
@@ -75,3 +109,19 @@ def start_scan(self, cmd: list, run_name: str, env: dict = None):
     except Exception as e:
         logger.exception(f"Error executing scan {run_name}")
         return {"status": "error", "error": str(e)}
+
+@celery_app.task(name="strix.kill_scan")
+def kill_scan(run_name: str):
+    """
+    Kill a running strix scan by matching its run_name in the process list.
+    This runs on the Celery worker where the scan is executing.
+    """
+    try:
+        # Send SIGTERM to any process matching --run-name <run_name>
+        result = subprocess.run(["pkill", "-f", f"--run-name {run_name}"], check=False)
+        if result.returncode == 0:
+            logger.info(f"Successfully sent kill signal to processes for scan {run_name}")
+        else:
+            logger.info(f"No running processes found to kill for scan {run_name}")
+    except Exception as e:
+        logger.error(f"Failed to kill scan {run_name}: {e}")

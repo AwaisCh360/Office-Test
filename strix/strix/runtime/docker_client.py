@@ -158,6 +158,9 @@ class StrixDockerSandboxSession(DockerSandboxSession):
                 },
             )
         host = f"[{ip}]" if ":" in ip else ip
+        # When using a custom docker network, there are no port bindings to localhost.
+        # Instead, the container is directly reachable by its internal IP and internal port.
+        # So we just return the host (the container IP) and the original port.
         return ExposedPortEndpoint(host=host, port=port, tls=False)
 
 

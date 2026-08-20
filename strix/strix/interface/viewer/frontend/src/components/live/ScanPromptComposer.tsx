@@ -22,6 +22,8 @@ interface ScanPromptComposerProps {
    * multi-agent graph variant.
    */
   fixedAgentId?: string;
+  /** The name of the run to steer. */
+  runName: string;
   className?: string;
 }
 
@@ -36,6 +38,7 @@ interface ScanPromptComposerProps {
 export function ScanPromptComposer({
   agents,
   fixedAgentId,
+  runName,
   className,
 }: ScanPromptComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -124,7 +127,7 @@ export function ScanPromptComposer({
     setSending(true);
     setFeedback(null);
     const name = targetName;
-    const res = await steerAgent(targetId, message);
+    const res = await steerAgent(runName, targetId, message);
     setSending(false);
     if (res.ok) {
       setValue("");

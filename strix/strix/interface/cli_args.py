@@ -271,7 +271,6 @@ Examples:
     args.targets_info = []
     args.local_sources = []
     args.diff_scope = {"active": False}
-    args.run_name = None
 
     if args.config:
         apply_config_override(validate_config_file(args.config))

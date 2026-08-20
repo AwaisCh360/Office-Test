@@ -150,7 +150,10 @@ export default function App() {
         schedule();
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Could not load run data.");
+        const msg = e instanceof Error ? e.message : "Could not load run data.";
+        if (activeRun !== null || msg !== "Not Found") {
+          setError(msg);
+        }
         schedule();
       }
     };
@@ -167,7 +170,10 @@ export default function App() {
         }
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Could not load run data.");
+        const msg = e instanceof Error ? e.message : "Could not load run data.";
+        if (activeRun !== null || msg !== "Not Found") {
+          setError(msg);
+        }
         schedule();
       }
     })();
@@ -202,13 +208,8 @@ export default function App() {
     if (run.finished) {
       initialViewAppliedRef.current = true;
       setView("overview");
-    } else if (agentCount > 0) {
-      // Live and agents have appeared: default to the agent graph. If it is
-      // live but no agents exist yet, wait (do not apply, do not set the flag).
-      initialViewAppliedRef.current = true;
-      setView("agents");
     }
-  }, [run, agentCount]);
+  }, [run]);
 
   // User-initiated navigation: mark the default guard applied so the per-run
   // default effect never yanks the user off the view they chose.
@@ -280,7 +281,7 @@ export default function App() {
           else userSetView(v);
         }}
         issuesCount={run?.vulnerabilities.length ?? 0}
-        agentCount={agentCount}
+        activeRun={!!activeRun}
         runCount={runs?.count ?? 0}
         finished={run?.finished ?? false}
         verified={verified}
@@ -406,7 +407,6 @@ export default function App() {
             <>
               <SummaryHeader summary={run.summary} />
 
-              {/* Tab strip: shown on small screens where the sidebar is hidden. */}
               <div className="flex gap-5 border-b border-[#2a2a2a] lg:hidden">
                 <TabButton active={view === "overview"} onClick={() => userSetView("overview")}>
                   Pentest Overview
@@ -414,11 +414,6 @@ export default function App() {
                 <TabButton active={view === "issues"} onClick={() => userSetView("issues")}>
                   Issues{run.vulnerabilities.length > 0 ? ` (${run.vulnerabilities.length})` : ""}
                 </TabButton>
-                {agentCount > 0 && (
-                  <TabButton active={view === "agents"} onClick={() => userSetView("agents")}>
-                    Agents ({agentCount})
-                  </TabButton>
-                )}
               </div>
 
               {view === "overview" ? (
@@ -430,9 +425,9 @@ export default function App() {
                   raw={run.raw}
                   finished={run.finished}
                   onOpenEmail={openEmailFromOverview}
+                  run={run}
+                  canSteer={canSteer}
                 />
-              ) : view === "agents" && agentCount > 0 ? (
-                <AgentsTab run={run} canSteer={canSteer} />
               ) : selected ? (
                 <div className="space-y-4">
                   <button
@@ -689,6 +684,8 @@ function OverviewTab({
   raw,
   finished,
   onOpenEmail,
+  run,
+  canSteer,
 }: {
   summary: ParsedRunSummary;
   counts: Record<VulnerabilitySeverity, number>;
@@ -697,6 +694,8 @@ function OverviewTab({
   raw: Record<string, unknown>;
   finished: boolean;
   onOpenEmail: () => void;
+  run: LoadedRun;
+  canSteer: boolean;
 }) {
   const sections = (
     [
@@ -740,10 +739,17 @@ function OverviewTab({
           <ContentSection content={dedupeHeadings(reportMarkdown)} />
         </div>
       ) : (
-        total === 0 && (
+        total === 0 && run.transcript.agents.length === 0 && (
           <p className="text-sm text-[#888]">No summary available for this run yet.</p>
         )
       )}
+
+      {run.transcript.agents.length > 0 && (
+        <div className="animate-card-in">
+          <AgentsTab run={run} canSteer={canSteer} />
+        </div>
+      )}
+
 
     </div>
   );
@@ -807,7 +813,7 @@ function AgentsTab({ run, canSteer }: { run: LoadedRun; canSteer: boolean }) {
       </div>
 
       {/* Live steering: only in-process while the scan runs. Otherwise omitted. */}
-      {steerable && <ScanPromptComposer agents={agents} />}
+      {steerable && <ScanPromptComposer agents={agents} runName={run.summary.run_name} />}
 
       {/* Re-run always routes to Strix Cloud. */}
       <div className="rounded-xl border border-[#222] bg-[rgba(255,255,255,0.02)] p-5">
@@ -820,6 +826,7 @@ function AgentsTab({ run, canSteer }: { run: LoadedRun; canSteer: boolean }) {
         agent={selectedAgent}
         events={events}
         steerable={steerable}
+        runName={run.summary.run_name}
         onClose={() => setSelectedId(null)}
       />
     </div>

@@ -309,6 +309,7 @@ async def create_or_reuse(
                 "https_proxy": container_caido_url,
                 "ALL_PROXY": container_caido_url,
                 "NO_PROXY": "localhost,127.0.0.1",
+                "STRIX_CAIDO_ALLOWED_DOMAINS": "*",
             },
         ),
     )

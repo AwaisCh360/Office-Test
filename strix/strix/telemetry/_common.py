@@ -26,7 +26,7 @@ def get_version() -> str:
     try:
         return version("strix-agent")
     except PackageNotFoundError:
-        logger.debug("strix-agent version lookup failed", exc_info=True)
+        logger.debug("strix-agent version lookup failed")
         return "unknown"
 
 

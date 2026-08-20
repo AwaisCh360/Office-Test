@@ -46,7 +46,7 @@ def _send(event: str, properties: dict[str, Any]) -> bool:
         with requests.post(url, timeout=SEND_TIMEOUT):
             pass
     except Exception:  # noqa: BLE001
-        logger.debug("scarf send failed for event %s", event, exc_info=True)
+        logger.debug("scarf send failed for event %s", event)
         return False
     else:
         logger.debug("scarf event sent: %s", event)

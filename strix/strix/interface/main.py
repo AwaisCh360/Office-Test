@@ -7,6 +7,9 @@ import argparse
 import asyncio
 import contextlib
 import os
+
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+
 import sys
 from pathlib import Path
 

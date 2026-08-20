@@ -42,7 +42,14 @@ class _PooledConnectionSession(SQLiteSession):
 
 def open_agent_session(agent_id: str, path: Path) -> SQLiteSession:
     path.parent.mkdir(parents=True, exist_ok=True)
-    return _PooledConnectionSession(session_id=agent_id, db_path=path)
+    session = _PooledConnectionSession(session_id=agent_id, db_path=path)
+    # Strix fix: SQLite WAL mode on Docker Desktop bind mounts (e.g. virtiofs)
+    # often fails to sync the -shm file correctly between connections, causing
+    # new connections to see an empty database (no such table: agent_sessions).
+    # Force journal_mode=DELETE to avoid the WAL shared memory bug.
+    with sqlite3.connect(str(path), check_same_thread=False) as conn:
+        conn.execute("PRAGMA journal_mode=DELETE")
+    return session
 
 
 async def seed_initial_input(session: Session, initial_input: Any) -> bool:

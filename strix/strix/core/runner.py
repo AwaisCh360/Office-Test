@@ -397,6 +397,48 @@ async def run_strix_scan(
         async with coordinator._lock:
             root_status = coordinator.statuses.get(root_id)
 
+        # Start a background task to listen for Redis steering commands
+        listener_task = None
+        redis_url = os.environ.get("REDIS_URL")
+        if redis_url:
+            async def listen_for_steering():
+                try:
+                    import json
+                    import redis.asyncio as redis_async
+                    client = redis_async.from_url(redis_url)
+                    pubsub = client.pubsub()
+                    channel = f"strix:steer:{scan_id}"
+                    await pubsub.subscribe(channel)
+                    logger.info(f"Subscribed to steering channel: {channel}")
+                    
+                    async for message in pubsub.listen():
+                        if message["type"] == "message":
+                            try:
+                                data = json.loads(message["data"])
+                                target_agent_id = data.get("agent_id")
+                                content = data.get("message")
+                                if target_agent_id and content:
+                                    logger.info(f"Received steering command for {target_agent_id}")
+                                    await coordinator.send(
+                                        target_agent_id,
+                                        {
+                                            "from": "user",
+                                            "type": "instruction",
+                                            "content": content,
+                                        },
+                                    )
+                            except Exception as e:
+                                logger.error(f"Error processing steering message: {e}")
+                except asyncio.CancelledError:
+                    if 'pubsub' in locals():
+                        await pubsub.unsubscribe(channel)
+                    if 'client' in locals():
+                        await client.aclose()
+                except Exception as e:
+                    logger.error(f"Redis steering listener failed: {e}")
+
+            listener_task = asyncio.create_task(listen_for_steering())
+
         result = await run_agent_loop(
             agent=root_agent,
             initial_input=initial_input,
@@ -411,6 +453,12 @@ async def run_strix_scan(
             event_sink=event_sink,
             hooks=hooks,
         )
+        
+        if listener_task:
+            listener_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await listener_task
+
         if not interactive and result is not None:
             final = getattr(result, "final_output", None)
             scan_completed = False
