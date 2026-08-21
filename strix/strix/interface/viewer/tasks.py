@@ -1,5 +1,6 @@
 import os
 import subprocess
+from pathlib import Path
 from celery import Celery
 import sentry_sdk
 from sentry_sdk.integrations.celery import CeleryIntegration
