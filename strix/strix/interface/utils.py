@@ -1559,7 +1559,11 @@ def clone_repository(repo_url: str, run_name: str, dest_name: str | None = None)
     if git_executable is None:
         raise FileNotFoundError("Git executable not found in PATH")
 
-    temp_dir = Path(tempfile.gettempdir()) / "strix_repos" / run_name
+    base_temp_dir = os.environ.get("STRIX_BASE_DIR")
+    if base_temp_dir:
+        temp_dir = Path(base_temp_dir) / "repos" / run_name
+    else:
+        temp_dir = Path(tempfile.gettempdir()) / "strix_repos" / run_name
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     if dest_name:

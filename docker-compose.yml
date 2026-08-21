@@ -51,6 +51,7 @@ services:
       - STRIX_DB_URL=postgresql://strix_user:strix_password@postgres/strix_db
       - STRIX_DOCKER_SANDBOX_NETWORK=office_default
       - STRIX_BASE_DIR=/app/strix_runs
+      - STRIX_HOST_BASE_DIR=/Users/bit/Desktop/Office/strix_runs
     depends_on:
       - redis
       - postgres

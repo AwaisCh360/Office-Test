@@ -50,14 +50,24 @@ def _host_identity_env() -> dict[str, str]:
 
 def build_bind_mounts(local_sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     bind_mounts: list[dict[str, Any]] = []
+    
+    # Path translation for Docker-in-Docker
+    dind_container_base = os.environ.get("STRIX_BASE_DIR")
+    dind_host_base = os.environ.get("STRIX_HOST_BASE_DIR")
+    
     for src in local_sources:
         ws_subdir = src.get("workspace_subdir") or ""
         host_path = src.get("source_path") or ""
         if not ws_subdir or not host_path:
             continue
         resolved = Path(host_path).expanduser().resolve()
+        
+        source_path_str = str(resolved)
+        if dind_container_base and dind_host_base and source_path_str.startswith(dind_container_base):
+            source_path_str = source_path_str.replace(dind_container_base, dind_host_base, 1)
+            
         target = f"{_WORKSPACE_ROOT}/{ws_subdir}"
-        bind_mounts.append({"source": str(resolved), "target": target, "read_only": False})
+        bind_mounts.append({"source": source_path_str, "target": target, "read_only": False})
         if src.get("protect_metadata"):
             bind_mounts.extend(_metadata_mounts(resolved, target))
     return bind_mounts
